@@ -24,6 +24,26 @@ static PyObject *py_fmedian(PyObject *self, PyObject *args)
     return NULL;
   }
 
+  /* If user passed a NumPy array with wrong dtype, raise a TypeError rather than silently casting. */
+  if (PyArray_Check(in_obj))
+  {
+    PyArrayObject *tmp = (PyArrayObject *)in_obj;
+    if (PyArray_TYPE(tmp) != NPY_DOUBLE)
+    {
+      PyErr_SetString(PyExc_TypeError, "fmedian: input must be numpy array of dtype float64");
+      return NULL;
+    }
+  }
+  if (PyArray_Check(out_obj))
+  {
+    PyArrayObject *tmp = (PyArrayObject *)out_obj;
+    if (PyArray_TYPE(tmp) != NPY_DOUBLE)
+    {
+      PyErr_SetString(PyExc_TypeError, "fmedian: output must be numpy array of dtype float64");
+      return NULL;
+    }
+  }
+
   PyArrayObject *in_arr = (PyArrayObject *)PyArray_FROM_OTF(in_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY | NPY_ARRAY_C_CONTIGUOUS);
   PyArrayObject *out_arr = (PyArrayObject *)PyArray_FROM_OTF(out_obj, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY | NPY_ARRAY_C_CONTIGUOUS);
   if (!in_arr || !out_arr)
@@ -87,12 +107,28 @@ static PyObject *py_fmedian(PyObject *self, PyObject *args)
             continue;
           if (exclude_center && dx == 0 && dy == 0)
             continue;
-          buf[count++] = in[yy * nx + xx];
+          double v = in[yy * nx + xx];
+          if (!isnan(v))
+          {
+            buf[count++] = v;
+          }
         }
       }
       if (count == 0)
       {
-        out[iy * nx + ix] = 0.0;
+        /* No finite neighbors found. Behavior:
+         * - For exclude_center==1: if center is finite, use center value; else write NaN.
+         * - For exclude_center==0: no finite values in window -> write NaN.
+         */
+        double center = in[iy * nx + ix];
+        if (exclude_center && !isnan(center))
+        {
+          out[iy * nx + ix] = center;
+        }
+        else
+        {
+          out[iy * nx + ix] = NAN;
+        }
       }
       else
       {

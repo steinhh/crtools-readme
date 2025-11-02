@@ -13,6 +13,26 @@ static PyObject *py_fsigma(PyObject *self, PyObject *args)
     return NULL;
   }
 
+  /* Enforce numpy arrays of dtype float64 when arrays are passed directly. */
+  if (PyArray_Check(in_obj))
+  {
+    PyArrayObject *tmp = (PyArrayObject *)in_obj;
+    if (PyArray_TYPE(tmp) != NPY_DOUBLE)
+    {
+      PyErr_SetString(PyExc_TypeError, "fsigma: input must be numpy array of dtype float64");
+      return NULL;
+    }
+  }
+  if (PyArray_Check(out_obj))
+  {
+    PyArrayObject *tmp = (PyArrayObject *)out_obj;
+    if (PyArray_TYPE(tmp) != NPY_DOUBLE)
+    {
+      PyErr_SetString(PyExc_TypeError, "fsigma: output must be numpy array of dtype float64");
+      return NULL;
+    }
+  }
+
   PyArrayObject *in_arr = (PyArrayObject *)PyArray_FROM_OTF(in_obj, NPY_DOUBLE, NPY_ARRAY_IN_ARRAY | NPY_ARRAY_C_CONTIGUOUS);
   PyArrayObject *out_arr = (PyArrayObject *)PyArray_FROM_OTF(out_obj, NPY_DOUBLE, NPY_ARRAY_INOUT_ARRAY | NPY_ARRAY_C_CONTIGUOUS);
   if (!in_arr || !out_arr)
@@ -66,8 +86,11 @@ static PyObject *py_fsigma(PyObject *self, PyObject *args)
           if (exclude_center && dx == 0 && dy == 0)
             continue;
           double v = in[yy * nx + xx];
-          sum += v;
-          count += 1;
+          if (!isnan(v))
+          {
+            sum += v;
+            count += 1;
+          }
         }
       }
       if (count == 0)
@@ -91,8 +114,11 @@ static PyObject *py_fsigma(PyObject *self, PyObject *args)
             if (exclude_center && dx == 0 && dy == 0)
               continue;
             double v = in[yy * nx + xx];
-            double d = v - mean;
-            ss += d * d;
+            if (!isnan(v))
+            {
+              double d = v - mean;
+              ss += d * d;
+            }
           }
         }
         out[iy * nx + ix] = sqrt(ss / count);
